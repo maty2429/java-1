@@ -8,9 +8,15 @@ import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.jdbc.support.KeyHolder;
 import org.springframework.stereotype.Repository;
 
+import java.sql.Date;
+import java.sql.Types;
 import java.util.List;
 import java.util.Optional;
 
+/**
+ * Repositorio de Experience. Estructura analoga a EducationRepositoryImpl.
+ * Las fechas se manejan como LocalDate en Java <-> DATE en SQL.
+ */
 @Repository
 @RequiredArgsConstructor
 public class ExperienceRepositoryImpl implements IExperienceRepository {
@@ -22,8 +28,10 @@ public class ExperienceRepositoryImpl implements IExperienceRepository {
         ex.setId(rs.getLong("id"));
         ex.setJobTitle(rs.getString("job_title"));
         ex.setCompanyName(rs.getString("company_name"));
-        ex.setStartDate(rs.getString("start_date"));
-        ex.setEndDate(rs.getString("end_date"));
+        Date start = rs.getDate("start_date");
+        ex.setStartDate(start != null ? start.toLocalDate() : null);
+        Date end = rs.getDate("end_date");
+        ex.setEndDate(end != null ? end.toLocalDate() : null);
         ex.setDescription(rs.getString("description"));
         return ex;
     };
@@ -31,15 +39,19 @@ public class ExperienceRepositoryImpl implements IExperienceRepository {
     @Override
     public Experience save(Experience experience, Long personalInfoId) {
         if (experience.getId() == null) {
-            String sql = "INSERT INTO experiences (job_title, company_name, start_date, end_date, description, personal_info_id) VALUES (?, ?, CAST(? AS DATE), CAST(? AS DATE), ?, ?)";
+            String sql = "INSERT INTO experiences (job_title, company_name, start_date, end_date, description, personal_info_id) VALUES (?, ?, ?, ?, ?, ?)";
             KeyHolder keyHolder = new GeneratedKeyHolder();
 
             jdbcTemplate.update(connection -> {
                 var ps = connection.prepareStatement(sql, new String[]{"id"});
                 ps.setString(1, experience.getJobTitle());
                 ps.setString(2, experience.getCompanyName());
-                ps.setString(3, experience.getStartDate());
-                ps.setString(4, experience.getEndDate());
+                ps.setDate(3, Date.valueOf(experience.getStartDate()));
+                if (experience.getEndDate() != null) {
+                    ps.setDate(4, Date.valueOf(experience.getEndDate()));
+                } else {
+                    ps.setNull(4, Types.DATE);
+                }
                 ps.setString(5, experience.getDescription());
                 ps.setLong(6, personalInfoId);
                 return ps;
@@ -49,8 +61,14 @@ public class ExperienceRepositoryImpl implements IExperienceRepository {
                 experience.setId(keyHolder.getKey().longValue());
             }
         } else {
-            String sql = "UPDATE experiences SET job_title = ?, company_name = ?, start_date = CAST(? AS DATE), end_date = CAST(? AS DATE), description = ? WHERE id = ?";
-            jdbcTemplate.update(sql, experience.getJobTitle(), experience.getCompanyName(), experience.getStartDate(), experience.getEndDate(), experience.getDescription(), experience.getId());
+            String sql = "UPDATE experiences SET job_title = ?, company_name = ?, start_date = ?, end_date = ?, description = ? WHERE id = ?";
+            jdbcTemplate.update(sql,
+                    experience.getJobTitle(),
+                    experience.getCompanyName(),
+                    Date.valueOf(experience.getStartDate()),
+                    experience.getEndDate() != null ? Date.valueOf(experience.getEndDate()) : null,
+                    experience.getDescription(),
+                    experience.getId());
         }
         return experience;
     }
@@ -70,6 +88,13 @@ public class ExperienceRepositoryImpl implements IExperienceRepository {
     @Override
     public List<Experience> findByPersonalInfoId(Long personalInfoId) {
         String sql = "SELECT * FROM experiences WHERE personal_info_id = ?";
+        return jdbcTemplate.query(sql, experienceRowMapper, personalInfoId);
+    }
+
+    @Override
+    public List<Experience> findCurrentByPersonalInfoId(Long personalInfoId) {
+        // "Experiencias actuales" = aquellas donde no se completo endDate (trabajo en curso).
+        String sql = "SELECT * FROM experiences WHERE personal_info_id = ? AND end_date IS NULL";
         return jdbcTemplate.query(sql, experienceRowMapper, personalInfoId);
     }
 

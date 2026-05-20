@@ -13,17 +13,17 @@ import java.util.Optional;
 
 /**
  * @Repository: Le indica a Spring que esta clase es un componente de acceso a datos.
- * Gestiona cómo se guardan y recuperan los datos de la base de datos.
+ * Gestiona como se guardan y recuperan los datos de la base de datos.
  */
 @Repository
-@RequiredArgsConstructor // Genera automáticamente el constructor para dependencias (como JdbcTemplate)
+@RequiredArgsConstructor // Genera automaticamente el constructor para dependencias (como JdbcTemplate)
 public class PersonalInfoRepositoryImpl implements IPersonalInfoRepository {
 
     private final JdbcTemplate jdbcTemplate;
 
     /**
      * RowMapper: Un "traductor" que convierte cada fila de la base de datos (ResultSet)
-     * en un objeto Java (PersonalInfo).
+     * en un objeto Java (PersonalInfo). Se ejecuta una vez por cada fila devuelta.
      */
     private final RowMapper<PersonalInfo> personalInfoRowMapper = (rs, rowNum) -> {
         PersonalInfo p = new PersonalInfo();
@@ -33,7 +33,8 @@ public class PersonalInfoRepositoryImpl implements IPersonalInfoRepository {
         p.setTitle(rs.getString("title"));
         p.setProfileDescription(rs.getString("profile_description"));
         p.setProfileImageUrl(rs.getString("profile_image_url"));
-        p.setYearsOfExperience(rs.getInt("years_of_experience"));
+        // getObject(...,Integer.class) preserva null. getInt() devolveria 0 para null.
+        p.setYearsOfExperience(rs.getObject("years_of_experience", Integer.class));
         p.setEmail(rs.getString("email"));
         p.setPhone(rs.getString("phone"));
         p.setLinkedinUrl(rs.getString("linkedin_url"));
@@ -47,10 +48,10 @@ public class PersonalInfoRepositoryImpl implements IPersonalInfoRepository {
     @Override
     public PersonalInfo save(PersonalInfo personalInfo) {
         if (personalInfo.getId() == null) {
-            // OPERACIÓN: INSERTAR nuevo registro
+            // OPERACION: INSERTAR nuevo registro
             String sql = "INSERT INTO personal_info (first_name, last_name, title, profile_description, profile_image_url, years_of_experience, email, phone, linkedin_url, github_url) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
-            // KeyHolder: Se usa para capturar el ID generado automáticamente por la base de datos.
+            // KeyHolder: Se usa para capturar el ID generado automaticamente por la base de datos.
             KeyHolder keyHolder = new GeneratedKeyHolder();
 
             jdbcTemplate.update(connection -> {
@@ -60,7 +61,8 @@ public class PersonalInfoRepositoryImpl implements IPersonalInfoRepository {
                 ps.setString(3, personalInfo.getTitle());
                 ps.setString(4, personalInfo.getProfileDescription());
                 ps.setString(5, personalInfo.getProfileImageUrl());
-                ps.setInt(6, personalInfo.getYearsOfExperience());
+                // setObject acepta null sin error (a diferencia de setInt)
+                ps.setObject(6, personalInfo.getYearsOfExperience());
                 ps.setString(7, personalInfo.getEmail());
                 ps.setString(8, personalInfo.getPhone());
                 ps.setString(9, personalInfo.getLinkedinUrl());
@@ -73,7 +75,7 @@ public class PersonalInfoRepositoryImpl implements IPersonalInfoRepository {
                 personalInfo.setId(keyHolder.getKey().longValue());
             }
         } else {
-            // OPERACIÓN: ACTUALIZAR registro existente
+            // OPERACION: ACTUALIZAR registro existente
             String sql = "UPDATE personal_info SET first_name = ?, last_name = ?, title = ?, profile_description = ?, profile_image_url = ?, years_of_experience = ?, email = ?, phone = ?, linkedin_url = ?, github_url = ? WHERE id = ?";
 
             jdbcTemplate.update(sql,
@@ -88,8 +90,8 @@ public class PersonalInfoRepositoryImpl implements IPersonalInfoRepository {
     @Override
     public Optional<PersonalInfo> findById(Long id) {
         String sql = "SELECT * FROM personal_info WHERE id = ?";
-        /**
-         * Usamos .query() + .stream().findFirst() en lugar de queryForObject 
+        /*
+         * Usamos .query() + .stream().findFirst() en lugar de queryForObject
          * para devolver un Optional de forma segura sin lanzar excepciones si no hay registros.
          */
         return jdbcTemplate.query(sql, personalInfoRowMapper, id)
@@ -98,9 +100,26 @@ public class PersonalInfoRepositoryImpl implements IPersonalInfoRepository {
     }
 
     @Override
+    public Optional<PersonalInfo> findByEmail(String email) {
+        // Util en escenarios reales (login, validar duplicados, recuperar contrasena...)
+        String sql = "SELECT * FROM personal_info WHERE email = ?";
+        return jdbcTemplate.query(sql, personalInfoRowMapper, email)
+                .stream()
+                .findFirst();
+    }
+
+    @Override
     public List<PersonalInfo> findAll() {
         String sql = "SELECT * FROM personal_info";
         return jdbcTemplate.query(sql, personalInfoRowMapper);
+    }
+
+    @Override
+    public boolean existsById(Long id) {
+        // SELECT COUNT(*) es la forma clasica de chequear existencia sin traer la fila completa.
+        String sql = "SELECT COUNT(*) FROM personal_info WHERE id = ?";
+        Integer count = jdbcTemplate.queryForObject(sql, Integer.class, id);
+        return count != null && count > 0;
     }
 
     @Override

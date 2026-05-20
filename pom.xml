@@ -64,6 +64,25 @@
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-validation</artifactId>
 		</dependency>
+		<!--
+			H2: Base de datos en memoria que usamos SOLO para tests.
+			Permite levantar una BD efímera al correr los tests, sin necesidad
+			de tener Postgres real corriendo. Cada test arranca con BD limpia.
+			'scope=test' significa que H2 NO se incluye en el JAR de producción.
+		-->
+		<dependency>
+			<groupId>com.h2database</groupId>
+			<artifactId>h2</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-actuator</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-security</artifactId>
+		</dependency>
 	</dependencies>
 
 	<build>

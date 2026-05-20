@@ -2,42 +2,54 @@ package com.a.demo.exception;
 
 import lombok.Getter;
 import org.springframework.validation.BindingResult;
+import org.springframework.validation.FieldError;
+
+import java.util.ArrayList;
+import java.util.List;
 
 /**
- * ¿Para qué sirve esta clase?
- * Sirve para crear tu propia excepción personalizada. En lugar de lanzar un error genérico, 
- * lanzas una `ValidationException` que lleva dentro toda la lista de errores detallados.
- * 
- * @Getter: Anotación de Lombok que genera automáticamente el método 'getBindingResult()'.
- * Esto permite que el manejador de errores global pueda sacar la lista de errores de aquí adentro.
+ * Excepcion personalizada para errores de validacion en la capa de Servicio.
+ *
+ * Por que existe?
+ *   Cuando el controller usa @Valid, Spring lanza MethodArgumentNotValidException por su cuenta
+ *   y nosotros la atrapamos en GlobalExceptionHandler. Pero si el service hace una validacion
+ *   manual (por ejemplo, reglas de negocio cruzadas), no hay una excepcion natural para eso.
+ *   Esta clase llena ese hueco: el service la lanza y el handler la convierte en respuesta JSON 400.
+ *
+ * Por que heredamos de RuntimeException?
+ *   En Java hay excepciones comprobadas (te obligan a poner try-catch) y no comprobadas (RuntimeException).
+ *   Al ser RuntimeException podemos lanzarla desde cualquier metodo sin ensuciar el codigo
+ *   con try-catch por todos lados. Simplemente detiene el flujo y viaja hasta el manejador global.
+ *
+ * @Getter (Lombok): genera getErrors() y getBindingResult() automaticamente.
  */
 @Getter
 public class ValidationException extends RuntimeException {
 
-    /**
-     * ¿Qué es BindingResult?
-     * Es como el "bolsito de los errores" de Spring. Cuando mandas datos a un controlador con @Valid, 
-     * Spring revisa el modelo. Si encuentra que el email está mal o el nombre está vacío, 
-     * mete esos errores detallados (qué campo falló y por qué) dentro de este BindingResult.
-     */
-    private final BindingResult bindingResult;
+    /** Lista plana de mensajes de error (lo que devolvemos al cliente en el JSON). */
+    private final List<String> errors;
 
     /**
-     * Constructor de la excepción.
-     * 
-     * ¿Por qué heredamos de RuntimeException?
-     * En Java hay excepciones comprobadas (te obligan a poner try-catch) y no comprobadas (RuntimeException).
-     * Al ser RuntimeException, podemos lanzarla desde cualquier controlador sin ensuciar el código
-     * con try-catch por todos lados. Simplemente detiene el flujo y viaja hasta el manejador de errores.
+     * Constructor a partir de una lista de mensajes (uso simple).
+     * Ejemplo: new ValidationException(List.of("endDate must be after startDate"));
+     */
+    public ValidationException(List<String> errors) {
+        super("Validation failed: " + errors.size() + " error(s)");
+        this.errors = errors;
+    }
+
+    /**
+     * Constructor a partir de un BindingResult de Spring (compatibilidad con validacion manual
+     * con BeanPropertyBindingResult + Validator). Extraemos los mensajes en una lista plana.
      */
     public ValidationException(BindingResult bindingResult) {
-        /**
-         * super(...): Llama al constructor de la clase padre (RuntimeException).
-         * Esto guarda el mensaje descriptivo en el sistema para cuando mires la consola del servidor.
-         */
-        super("Error de validación: se encontraron " + bindingResult.getErrorCount() + " errores");
-        
-        // Guardamos el bolsito de errores en nuestra excepción para usarlo después.
-        this.bindingResult = bindingResult;
+        super("Validation failed: " + bindingResult.getErrorCount() + " error(s)");
+        List<String> messages = new ArrayList<>();
+        for (FieldError fe : bindingResult.getFieldErrors()) {
+            messages.add(fe.getField() + ": " + fe.getDefaultMessage());
+        }
+        // Errores globales (no atados a un campo en particular)
+        bindingResult.getGlobalErrors().forEach(ge -> messages.add(ge.getDefaultMessage()));
+        this.errors = messages;
     }
 }
